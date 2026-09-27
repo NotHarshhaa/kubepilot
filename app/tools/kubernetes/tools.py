@@ -41,6 +41,16 @@ def apps() -> client.AppsV1Api:
     return client.AppsV1Api()
 
 
+def networking() -> client.NetworkingV1Api:
+    _configure()
+    return client.NetworkingV1Api()
+
+
+def autoscaling() -> client.AutoscalingV2Api:
+    _configure()
+    return client.AutoscalingV2Api()
+
+
 def _namespace(namespace: str = "") -> str:
     return namespace or get_settings().default_namespace
 
@@ -153,6 +163,7 @@ def get_events(namespace: str = "", involved_object: str = "") -> str:
     try:
         field_selector = f"involvedObject.name={involved_object}" if involved_object else None
         events = core().list_namespaced_event(ns, field_selector=field_selector).items
+
         def _event_time(event):
             return event.last_timestamp or event.event_time or event.first_timestamp
 
@@ -164,7 +175,7 @@ def get_events(namespace: str = "", involved_object: str = "") -> str:
             return f"No events found in namespace '{ns}'."
         lines = [f"Recent events in namespace '{ns}' (newest first):"]
         for event in events[:30]:
-            when = (event.last_timestamp or event.first_timestamp or event.event_time or "unknown time")
+            when = event.last_timestamp or event.first_timestamp or event.event_time or "unknown time"
             lines.append(
                 f"  [{when}] {event.type} {event.reason} x{event.count or 1} "
                 f"{event.involved_object.kind}/{event.involved_object.name}: {event.message}"
@@ -175,8 +186,16 @@ def get_events(namespace: str = "", involved_object: str = "") -> str:
 
 
 @register(SafetyCategory.READ)
-def get_logs(pod: str, namespace: str = "", container: str = "", tail_lines: int = 100) -> str:
-    """Read recent container logs from a pod (last N lines). Omit container for single-container pods."""
+def get_logs(
+    pod: str,
+    namespace: str = "",
+    container: str = "",
+    tail_lines: int = 100,
+    previous: bool = False,
+) -> str:
+    """Read recent container logs from a pod (last N lines).
+    Set previous=True to view logs from previous terminated/crashed instance (CrashLoopBackOff).
+    Omit container for single-container pods."""
     ns = _namespace(namespace)
     try:
         logs = core().read_namespaced_pod_log(
@@ -184,11 +203,13 @@ def get_logs(pod: str, namespace: str = "", container: str = "", tail_lines: int
             namespace=ns,
             container=container or None,
             tail_lines=tail_lines,
+            previous=previous,
             timestamps=True,
         )
+        prev_str = " (previous terminated instance)" if previous else ""
         if not logs.strip():
-            return f"Pod '{pod}' in '{ns}' has no log output (container={container or 'default'})."
-        return f"Last {tail_lines} log lines from pod '{pod}' in '{ns}':\n{logs}"
+            return f"Pod '{pod}' in '{ns}' has no log output{prev_str} (container={container or 'default'})."
+        return f"Last {tail_lines} log lines from pod '{pod}' in '{ns}'{prev_str}:\n{logs}"
     except Exception as exc:
         return f"Error reading logs from pod '{pod}' in '{ns}': {exc}"
 
@@ -214,10 +235,16 @@ def describe_resource(kind: str, name: str, namespace: str = "") -> str:
             obj = client.BatchV1Api().read_namespaced_job(name, ns)
         elif kind == "node":
             obj = core().read_node(name)
+        elif kind == "ingress":
+            obj = networking().read_namespaced_ingress(name, ns)
+        elif kind in ("pvc", "persistentvolumeclaim"):
+            obj = core().read_namespaced_persistent_volume_claim(name, ns)
+        elif kind in ("hpa", "horizontalpodautoscaler"):
+            obj = autoscaling().read_namespaced_horizontal_pod_autoscaler(name, ns)
         else:
             return (
                 f"Unsupported kind '{kind}'. Supported: pod, deployment, service, "
-                "statefulset, daemonset, job, node."
+                "statefulset, daemonset, job, node, ingress, pvc, hpa."
             )
         data = json.dumps(client.ApiClient().sanitize_for_serialization(obj), indent=2, default=str)
         if len(data) > 12000:
@@ -355,3 +382,244 @@ def rollback_deployment(deployment: str, namespace: str = "") -> str:
         )
     except Exception as exc:
         return f"Error rolling back deployment '{deployment}' in '{ns}': {exc}"
+
+
+@register(SafetyCategory.READ)
+def get_ingresses(namespace: str = "") -> str:
+    """List ingress resources in a namespace with hosts, paths, backend services, and TLS status."""
+    ns = _namespace(namespace)
+    try:
+        items = networking().list_namespaced_ingress(ns).items
+        if not items:
+            return f"No ingresses found in namespace '{ns}'."
+        lines = [f"Ingresses in namespace '{ns}':"]
+        for ing in items:
+            rules = []
+            for rule in ing.spec.rules or []:
+                host = rule.host or "*"
+                for path_rule in rule.http.paths if rule.http else []:
+                    backend = path_rule.backend
+                    svc_name = backend.service.name if backend and backend.service else "?"
+                    svc_port = (
+                        backend.service.port.number or backend.service.port.name
+                        if backend and backend.service and backend.service.port
+                        else "?"
+                    )
+                    rules.append(f"{host}{path_rule.path or '/'} -> {svc_name}:{svc_port}")
+            tls_hosts = []
+            for t in ing.spec.tls or []:
+                tls_hosts.extend(t.hosts or [])
+            tls_info = f"tls=[{', '.join(tls_hosts)}]" if tls_hosts else "tls=none"
+            lines.append(
+                f"  {ing.metadata.name}  class={ing.spec.ingress_class_name or 'none'} "
+                f"{tls_info} rules=[{', '.join(rules)}] age={_age(ing.metadata.creation_timestamp)}"
+            )
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"Error listing ingresses in '{ns}': {exc}"
+
+
+@register(SafetyCategory.READ)
+def get_pvc_status(namespace: str = "") -> str:
+    """List PersistentVolumeClaims in a namespace with phase, storage class,
+    capacity, and volume name."""
+    ns = _namespace(namespace)
+    try:
+        items = core().list_namespaced_persistent_volume_claim(ns).items
+        if not items:
+            return f"No PVCs found in namespace '{ns}'."
+        lines = [f"PersistentVolumeClaims in namespace '{ns}':"]
+        for pvc in items:
+            status = pvc.status
+            capacity = "?"
+            if status.capacity and "storage" in status.capacity:
+                capacity = status.capacity["storage"]
+            elif (
+                pvc.spec.resources
+                and pvc.spec.resources.requests
+                and "storage" in pvc.spec.resources.requests
+            ):
+                capacity = pvc.spec.resources.requests["storage"]
+            sc = pvc.spec.storage_class_name or "none"
+            vol = pvc.spec.volume_name or "none"
+            lines.append(
+                f"  {pvc.metadata.name}  status={status.phase} storageclass={sc} "
+                f"capacity={capacity} volume={vol} "
+                f"access_modes={pvc.spec.access_modes or []} age={_age(pvc.metadata.creation_timestamp)}"
+            )
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"Error listing PVCs in '{ns}': {exc}"
+
+
+@register(SafetyCategory.READ)
+def get_hpa(namespace: str = "") -> str:
+    """List HorizontalPodAutoscalers in a namespace with target reference,
+    min/max replicas, current replicas, and condition states."""
+    ns = _namespace(namespace)
+    try:
+        items = autoscaling().list_namespaced_horizontal_pod_autoscaler(ns).items
+        if not items:
+            return f"No HPAs found in namespace '{ns}'."
+        lines = [f"HorizontalPodAutoscalers in namespace '{ns}':"]
+        for hpa in items:
+            spec = hpa.spec
+            status = hpa.status
+            target = f"{spec.scale_target_ref.kind}/{spec.scale_target_ref.name}"
+            current_rep = status.current_replicas or 0
+            desired_rep = status.desired_replicas or 0
+            lines.append(
+                f"  {hpa.metadata.name}  target={target} min={spec.min_replicas or 1} "
+                f"max={spec.max_replicas} current={current_rep} desired={desired_rep} "
+                f"age={_age(hpa.metadata.creation_timestamp)}"
+            )
+            for cond in status.conditions or []:
+                if cond.status == "False":
+                    lines.append(f"    condition {cond.type}=False ({cond.reason}): {cond.message}")
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"Error listing HPAs in '{ns}': {exc}"
+
+
+@register(SafetyCategory.READ)
+def cluster_health_scan() -> str:
+    """Scan the entire cluster across all namespaces for unhealthy pods, crashing containers,
+    node issues (MemoryPressure, NotReady), warning events, and stuck deployments.
+    Provides an instant cluster-wide triage report."""
+    try:
+        report_lines = ["=== KubePilot Cluster Health Triage ==="]
+        issues_found = 0
+
+        # 1. Nodes check
+        try:
+            nodes = core().list_node().items
+            unhealthy_nodes = []
+            for n in nodes:
+                node_name = n.metadata.name
+                conditions = {c.type: c.status for c in (n.status.conditions or [])}
+                reasons = []
+                if conditions.get("Ready") != "True":
+                    reasons.append("NotReady")
+                if conditions.get("MemoryPressure") == "True":
+                    reasons.append("MemoryPressure")
+                if conditions.get("DiskPressure") == "True":
+                    reasons.append("DiskPressure")
+                if conditions.get("PIDPressure") == "True":
+                    reasons.append("PIDPressure")
+                if reasons:
+                    unhealthy_nodes.append(f"{node_name} ({', '.join(reasons)})")
+
+            if unhealthy_nodes:
+                issues_found += len(unhealthy_nodes)
+                report_lines.append(f"\n[ALERT] Unhealthy Nodes ({len(unhealthy_nodes)}):")
+                for un in unhealthy_nodes:
+                    report_lines.append(f"  - {un}")
+            else:
+                report_lines.append(f"\n[OK] Nodes: {len(nodes)} total, all Ready.")
+        except Exception as exc:
+            report_lines.append(f"\n[WARN] Could not inspect nodes: {exc}")
+
+        # 2. Pods check across all namespaces
+        try:
+            all_pods = core().list_pod_for_all_namespaces().items
+            problem_pods = []
+            for p in all_pods:
+                ns = p.metadata.namespace
+                pod_name = p.metadata.name
+                phase = p.status.phase or "Unknown"
+                statuses = p.status.container_statuses or []
+                restarts = sum(s.restart_count for s in statuses)
+                crashes = []
+                for s in statuses:
+                    if s.state and s.state.waiting:
+                        reason = s.state.waiting.reason or "Waiting"
+                        if reason in (
+                            "CrashLoopBackOff",
+                            "ImagePullBackOff",
+                            "ErrImagePull",
+                            "CreateContainerConfigError",
+                        ):
+                            crashes.append(f"{s.name}:{reason}")
+                    if s.last_state and s.last_state.terminated:
+                        term_reason = s.last_state.terminated.reason or ""
+                        if term_reason == "OOMKilled":
+                            crashes.append(f"{s.name}:OOMKilled")
+
+                is_problem = (phase not in ("Running", "Succeeded")) or (len(crashes) > 0) or (restarts > 5)
+                if is_problem:
+                    details = []
+                    if phase != "Running":
+                        details.append(f"phase={phase}")
+                    if restarts > 0:
+                        details.append(f"restarts={restarts}")
+                    if crashes:
+                        details.append(f"crashes=[{', '.join(crashes)}]")
+                    problem_pods.append(f"{ns}/{pod_name}: {', '.join(details)}")
+
+            if problem_pods:
+                issues_found += len(problem_pods)
+                report_lines.append(f"\n[ALERT] Problematic Pods ({len(problem_pods)} of {len(all_pods)}):")
+                for pp in problem_pods[:20]:
+                    report_lines.append(f"  - {pp}")
+                if len(problem_pods) > 20:
+                    report_lines.append(f"  ... and {len(problem_pods) - 20} more.")
+            else:
+                report_lines.append(f"\n[OK] Pods: {len(all_pods)} total, all healthy.")
+        except Exception as exc:
+            report_lines.append(f"\n[WARN] Could not inspect pods: {exc}")
+
+        # 3. Deployments check
+        try:
+            deployments = apps().list_deployment_for_all_namespaces().items
+            stuck_deps = []
+            for d in deployments:
+                ns = d.metadata.namespace
+                name = d.metadata.name
+                desired = d.spec.replicas or 0
+                ready = d.status.ready_replicas or 0
+                unavailable = d.status.unavailable_replicas or 0
+                if ready < desired or unavailable > 0:
+                    stuck_deps.append(f"{ns}/{name} (ready={ready}/{desired}, unavailable={unavailable})")
+
+            if stuck_deps:
+                issues_found += len(stuck_deps)
+                report_lines.append(f"\n[ALERT] Degraded Deployments ({len(stuck_deps)}):")
+                for sd in stuck_deps:
+                    report_lines.append(f"  - {sd}")
+            else:
+                report_lines.append(f"\n[OK] Deployments: {len(deployments)} total, all ready.")
+        except Exception as exc:
+            report_lines.append(f"\n[WARN] Could not inspect deployments: {exc}")
+
+        # 4. Recent Warning events
+        try:
+            warning_events = core().list_event_for_all_namespaces(field_selector="type=Warning").items
+            if warning_events:
+
+                def _event_time(event):
+                    return event.last_timestamp or event.event_time or event.first_timestamp
+
+                warning_events.sort(
+                    key=lambda e: _event_time(e).timestamp() if _event_time(e) else 0.0,
+                    reverse=True,
+                )
+                report_lines.append(f"\n[ALERT] Recent Warning Events (top {min(len(warning_events), 10)}):")
+                for ev in warning_events[:10]:
+                    ev_ns = ev.involved_object.namespace or "cluster"
+                    report_lines.append(
+                        f"  - [{ev_ns}] {ev.involved_object.kind}/{ev.involved_object.name}: "
+                        f"{ev.reason} - {ev.message}"
+                    )
+            else:
+                report_lines.append("\n[OK] Warning Events: none recently.")
+        except Exception as exc:
+            report_lines.append(f"\n[WARN] Could not inspect events: {exc}")
+
+        report_lines.append(
+            f"\nSummary: {issues_found} potential issue(s) detected across cluster."
+            if issues_found > 0
+            else "\nSummary: Cluster is healthy. No immediate anomalies found."
+        )
+        return "\n".join(report_lines)
+    except Exception as exc:
+        return f"Error running cluster health scan: {exc}"

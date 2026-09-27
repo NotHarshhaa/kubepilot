@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from app.config.settings import get_settings
+from app.notifications import dispatch_notification
 from app.tools.audit import log_event
 from app.tools.registry import ToolSpec
 
@@ -22,6 +23,7 @@ class ApprovalRecord:
     requested_at: str
     status: str = "pending"
     result: str | None = None
+    note: str | None = None
 
 
 class ApprovalError(Exception):
@@ -41,6 +43,7 @@ class ApprovalManager:
         )
         self._records[record.id] = record
         log_event("approval_requested", approval_id=record.id, tool=tool, args=args)
+        dispatch_notification("approval_requested", record.id, tool, args, "pending")
         return record
 
     def get(self, approval_id: str) -> ApprovalRecord:
@@ -55,7 +58,7 @@ class ApprovalManager:
     def list_all(self) -> list[ApprovalRecord]:
         return list(self._records.values())
 
-    def approve(self, approval_id: str) -> ApprovalRecord:
+    def approve(self, approval_id: str, note: str | None = None) -> ApprovalRecord:
         record = self.get(approval_id)
         if record.status != "pending":
             raise ApprovalError(f"Approval {approval_id} is already '{record.status}'.")
@@ -66,15 +69,34 @@ class ApprovalManager:
             raise ApprovalError(f"Tool '{record.tool}' is not registered.")
         record.result = str(spec.func(**record.args))
         record.status = "approved"
-        log_event("approval_granted", approval_id=record.id, tool=record.tool)
+        record.note = note
+        log_event("approval_granted", approval_id=record.id, tool=record.tool, note=note)
+        dispatch_notification(
+            "approval_granted",
+            record.id,
+            record.tool,
+            record.args,
+            "approved",
+            result=record.result,
+            note=note,
+        )
         return record
 
-    def deny(self, approval_id: str) -> ApprovalRecord:
+    def deny(self, approval_id: str, note: str | None = None) -> ApprovalRecord:
         record = self.get(approval_id)
         if record.status != "pending":
             raise ApprovalError(f"Approval {approval_id} is already '{record.status}'.")
         record.status = "denied"
-        log_event("approval_denied", approval_id=record.id, tool=record.tool)
+        record.note = note
+        log_event("approval_denied", approval_id=record.id, tool=record.tool, note=note)
+        dispatch_notification(
+            "approval_denied",
+            record.id,
+            record.tool,
+            record.args,
+            "denied",
+            note=note,
+        )
         return record
 
 

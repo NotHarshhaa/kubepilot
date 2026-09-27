@@ -24,12 +24,17 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "httpx>=0.27",
+    "rich>=15.0.0",
 ]
 
 [project.optional-dependencies]
 gemini = ["langchain-google-genai>=2.0"]
 openai = ["langchain-openai>=0.2"]
+anthropic = ["langchain-anthropic>=0.2"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+kubepilot = "app.cli:main"
 
 [build-system]
 requires = ["hatchling"]

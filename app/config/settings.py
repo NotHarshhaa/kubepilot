@@ -8,13 +8,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # LLM provider: gemini | openai | ollama
+    # LLM provider: gemini | openai | ollama | anthropic
     llm_provider: str = "ollama"
     model_name: str = "llama3.1"
     temperature: float = 0.2
 
     google_api_key: str | None = None
     openai_api_key: str | None = None
+    openai_base_url: str | None = None
+    anthropic_api_key: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
     # Kubernetes
@@ -33,6 +35,11 @@ class Settings(BaseSettings):
     read_only: bool = False
     require_approval: bool = True
     audit_log_path: str = "logs/audit.jsonl"
+
+    # Notifications & Webhooks
+    webhook_url: str | None = None
+    slack_webhook_url: str | None = None
+    discord_webhook_url: str | None = None
 
 
 @lru_cache

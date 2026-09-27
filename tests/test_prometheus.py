@@ -23,10 +23,8 @@ def test_prom_query_formats_vector(monkeypatch):
             ],
         },
     }
-    monkeypatch.setattr(
-        prometheus.httpx, "get", lambda url, params, timeout: FakeResponse(payload)
-    )
-    out = prometheus.prom_query('sum(rate(http_requests_total[5m])) by (pod)')
+    monkeypatch.setattr(prometheus.httpx, "get", lambda url, params, timeout: FakeResponse(payload))
+    out = prometheus.prom_query("sum(rate(http_requests_total[5m])) by (pod)")
     assert '{pod="nginx-abc", status="500"} = 12.5' in out
     assert "{} = 0" in out
 

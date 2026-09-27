@@ -36,7 +36,5 @@ def build_tools() -> list:
     tools = []
     for spec in all_tools():
         func = spec.func if spec.category is SafetyCategory.READ else guarded_tool(spec)
-        tools.append(
-            StructuredTool.from_function(func=func, name=spec.name, description=spec.description)
-        )
+        tools.append(StructuredTool.from_function(func=func, name=spec.name, description=spec.description))
     return tools

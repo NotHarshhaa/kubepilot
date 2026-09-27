@@ -32,10 +32,27 @@ def get_llm():
                 "OpenAI provider selected but 'langchain-openai' is not installed. "
                 "Install it with: pip install -e '.[openai]'"
             ) from exc
-        return ChatOpenAI(
+        kwargs = {
+            "model": settings.model_name,
+            "temperature": settings.temperature,
+            "api_key": settings.openai_api_key,
+        }
+        if settings.openai_base_url:
+            kwargs["base_url"] = settings.openai_base_url
+        return ChatOpenAI(**kwargs)
+
+    if provider == "anthropic":
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as exc:
+            raise RuntimeError(
+                "Anthropic provider selected but 'langchain-anthropic' is not installed. "
+                "Install it with: pip install -e '.[anthropic]'"
+            ) from exc
+        return ChatAnthropic(
             model=settings.model_name,
             temperature=settings.temperature,
-            api_key=settings.openai_api_key,
+            api_key=settings.anthropic_api_key,
         )
 
     if provider == "ollama":
@@ -47,4 +64,6 @@ def get_llm():
             temperature=settings.temperature,
         )
 
-    raise ValueError(f"Unknown LLM provider '{settings.llm_provider}' (expected gemini, openai, or ollama).")
+    raise ValueError(
+        f"Unknown LLM provider '{settings.llm_provider}' (expected gemini, openai, anthropic, or ollama)."
+    )

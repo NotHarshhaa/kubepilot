@@ -60,9 +60,7 @@ def get_workflow(repo: str, run_id: int) -> str:
 def get_workflow_jobs(repo: str, run_id: int) -> str:
     """List jobs and steps for a GitHub Actions run, highlighting which step failed."""
     try:
-        response = httpx.get(
-            f"{API}/repos/{repo}/actions/runs/{run_id}/jobs", headers=_headers(), timeout=30
-        )
+        response = httpx.get(f"{API}/repos/{repo}/actions/runs/{run_id}/jobs", headers=_headers(), timeout=30)
         response.raise_for_status()
         jobs = response.json().get("jobs", [])
         if not jobs:
