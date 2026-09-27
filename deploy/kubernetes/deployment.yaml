@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubepilot
+  labels:
+    app: kubepilot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubepilot
+  template:
+    metadata:
+      labels:
+        app: kubepilot
+    spec:
+      containers:
+        - name: kubepilot
+          image: kubepilot:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: LLM_PROVIDER
+              value: "ollama"
+            - name: MODEL_NAME
+              value: "llama3.1"
+            - name: OLLAMA_BASE_URL
+              value: "http://ollama.default.svc:11434"
+            - name: PROMETHEUS_URL
+              value: "http://prometheus.default.svc:9090"
+            - name: LOKI_URL
+              value: "http://loki.default.svc:3100"
+            - name: REQUIRE_APPROVAL
+              value: "true"
+            - name: READ_ONLY
+              value: "false"
+            # Provide the LLM key via a Secret instead of a plain env var when
+            # using gemini/openai:
+            # - name: GOOGLE_API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: kubepilot-secrets
+            #       key: google-api-key
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10

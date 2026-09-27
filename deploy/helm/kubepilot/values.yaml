@@ -1,0 +1,31 @@
+replicaCount: 1
+
+image:
+  repository: kubepilot
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+# LLM provider: ollama | gemini | openai
+config:
+  llmProvider: ollama
+  modelName: llama3.1
+  ollamaBaseUrl: http://ollama.default.svc:11434
+  prometheusUrl: http://prometheus.default.svc:9090
+  lokiUrl: http://loki.default.svc:3100
+  requireApproval: "true"
+  readOnly: "false"
+
+# Extra env (e.g. GOOGLE_API_KEY / OPENAI_API_KEY) — prefer an existing secret.
+existingSecret: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

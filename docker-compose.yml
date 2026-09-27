@@ -1,0 +1,36 @@
+# Local stack for development: KubePilot + Prometheus + Loki.
+# KubePilot expects a kubeconfig mounted at ~/.kube/config (see volumes below).
+
+services:
+  kubepilot:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      MODEL_NAME: ${MODEL_NAME:-llama3.1}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      REQUIRE_APPROVAL: ${REQUIRE_APPROVAL:-true}
+      READ_ONLY: ${READ_ONLY:-false}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Read-only kubeconfig so the agent can talk to your local cluster
+      - ${KUBECONFIG:-~/.kube/config}:/home/kubepilot/.kube/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  loki:
+    image: grafana/loki:3.1.1
+    ports:
+      - "3100:3100"
