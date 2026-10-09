@@ -70,13 +70,17 @@ The agent does not get unrestricted shell access — it only sees what's exposed
 ### Tool layer
 
 ```text
-Kubernetes: get_pods · get_deployments · get_services · get_events
-            get_logs (supports previous crash logs) · describe_resource
-            rollout_status · get_ingresses · get_pvc_status · get_hpa
-            cluster_health_scan · restart_deployment · scale_deployment · rollback_deployment
-Prometheus: query · query_range
-Loki:       query_logs
-GitHub:     get_repository · get_workflow · get_workflow_logs · get_commit
+Kubernetes:  get_pods · get_deployments · get_services · get_events
+             get_logs (supports previous crash logs) · describe_resource
+             rollout_status · get_ingresses · get_pvc_status · get_hpa
+             cluster_health_scan · restart_deployment · scale_deployment · rollback_deployment
+GitOps/Helm: helm_list · helm_status · helm_history · rollback_helm_release
+             get_argocd_apps · get_argocd_app_diff · sync_argocd_app
+Diagnostics: run_diagnostic_runbook (CrashLoopBackOff · OOMKilled · ImagePullBackOff · PendingPod)
+Prometheus:  query · query_range
+Loki:        query_logs
+GitHub:      get_repository · get_workflow · get_workflow_logs · get_commit
+Protocol:    MCP (Model Context Protocol) Server for Cursor, Claude Desktop & Zed
 ```
 
 ---
@@ -156,6 +160,10 @@ uv run kubepilot chat
 Available CLI commands:
 - `kubepilot ask "Why is nginx pod restarting?"` — Run a one-shot troubleshooting query
 - `kubepilot scan` — Instant cluster-wide health triage across all nodes, pods, and deployments
+- `kubepilot runbook [pod] [--type crashloop|oom|imagepull|pending]` — Run automated deep diagnostic runbook
+- `kubepilot helm [--namespace <ns>]` — Inspect Helm releases and revisions
+- `kubepilot argocd [--app <name>]` — Inspect Argo CD GitOps applications and sync status
+- `kubepilot mcp` — Launch Model Context Protocol (MCP) server over stdio
 - `kubepilot approvals list` — View pending and executed operational actions
 - `kubepilot approvals approve <id>` — Approve and execute a proposed operational action
 - `kubepilot approvals deny <id>` — Deny a proposed operational action
@@ -185,10 +193,57 @@ curl -N -X POST http://localhost:8000/query/stream \
 # Instant cluster-wide health triage
 curl http://localhost:8000/cluster/scan
 
+# Run automated diagnostic runbook for a pod
+curl -X POST http://localhost:8000/diagnostics/runbook \
+  -H "Content-Type: application/json" \
+  -d '{"pod_name": "checkout-api-xxx", "namespace": "prod", "runbook_type": "auto"}'
+
+# Inspect Helm releases
+curl http://localhost:8000/gitops/helm?namespace=kube-system
+
+# Inspect Argo CD applications
+curl http://localhost:8000/gitops/argocd?namespace=argocd
+
 # Generate post-mortem report
 curl -X POST http://localhost:8000/reports/incident \
   -H "Content-Type: application/json" \
   -d '{"title": "API Gateway Outage", "summary": "CrashLoopBackOff due to OOM", "root_cause": "Memory leak"}'
+```
+
+#### 3. Model Context Protocol (MCP) Server
+
+KubePilot includes a built-in MCP server that exposes all Kubernetes, GitOps, and diagnostic tools to any MCP-compliant AI client, such as **Claude Desktop**, **Cursor**, **Zed**, or **Windsurf**.
+
+Launch standalone:
+```bash
+uv run kubepilot mcp
+# or:
+python -m app.mcp
+```
+
+##### Claude Desktop Configuration (`claude_desktop_config.json`)
+```json
+{
+  "mcpServers": {
+    "kubepilot": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/kubepilot", "run", "kubepilot", "mcp"]
+    }
+  }
+}
+```
+
+##### Cursor / Windsurf Configuration (`mcp.json`)
+```json
+{
+  "mcpServers": {
+    "kubepilot": {
+      "command": "python",
+      "args": ["-m", "app.mcp"],
+      "cwd": "/path/to/kubepilot"
+    }
+  }
+}
 ```
 
 ---
@@ -200,15 +255,16 @@ curl -X POST http://localhost:8000/reports/incident \
 - [x] Container logs with crash inspection (`previous=True` for CrashLoopBackOff)
 - [x] Automated cluster-wide health triage scanner (`cluster_health_scan`)
 - [x] Rollout status and revision history
+- [x] **Automated Diagnostic Runbooks** (`CrashLoopBackOff`, `OOMKilled`, `ImagePullBackOff`, `PendingPod`)
+- [x] **GitOps & Package Manager Support** (Helm releases, history, rollback; Argo CD app status, diff, sync)
+- [x] **Model Context Protocol (MCP) Server** (standard stdio JSON-RPC for Claude Desktop & Cursor)
 - [x] Prometheus and Loki queries with basic metric/log correlation
 - [x] Multi-turn conversational sessions and SSE real-time streaming
-- [x] Interactive Rich CLI (`kubepilot`) with in-terminal approval prompts
+- [x] Interactive Rich CLI (`kubepilot`) with in-terminal approval prompts and slash commands
 - [x] SRE Incident Post-Mortem Markdown Report Generator
 - [x] Action approval flow, tool permissions, read-only mode, audit logs
 - [x] Webhook alerting for approvals (Slack, Discord, generic HTTP)
 - [x] Multi-provider LLM support: Anthropic Claude, Google Gemini, OpenAI, Ollama
-
-Everything else — MCP, RAG, incident memory, Helm/Argo CD integration, multi-agent workflows — is a **later** consideration, only if the core proves useful. It's explicitly out of scope for v1.0.0.
 
 ---
 

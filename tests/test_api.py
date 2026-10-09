@@ -80,3 +80,28 @@ def test_approve_endpoint_executes_pending_action(monkeypatch):
 def test_approve_unknown_id_conflict():
     response = client.post("/approvals/bogus/approve")
     assert response.status_code in (404, 409)
+
+
+def test_diagnostics_runbook_endpoint(monkeypatch):
+    from app.diagnostics import runbooks
+
+    monkeypatch.setattr(runbooks, "run_diagnostic_runbook", lambda **kwargs: "Mock Diagnostic Report")
+
+    response = client.post("/diagnostics/runbook", json={"pod_name": "api-pod", "namespace": "default"})
+    assert response.status_code == 200
+    assert response.json()["report"] == "Mock Diagnostic Report"
+
+
+def test_gitops_endpoints(monkeypatch):
+    from app.tools.gitops import argocd, helm
+
+    monkeypatch.setattr(helm, "helm_list", lambda **kwargs: "Mock Helm List")
+    monkeypatch.setattr(argocd, "get_argocd_apps", lambda **kwargs: "Mock ArgoCD Apps")
+
+    res_helm = client.get("/gitops/helm")
+    assert res_helm.status_code == 200
+    assert res_helm.json()["output"] == "Mock Helm List"
+
+    res_argo = client.get("/gitops/argocd")
+    assert res_argo.status_code == 200
+    assert res_argo.json()["output"] == "Mock ArgoCD Apps"

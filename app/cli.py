@@ -50,6 +50,45 @@ def cmd_scan() -> None:
     console.print(Panel(report, title="Cluster Health Triage", border_style="green"))
 
 
+def cmd_runbook(pod_name: str = "", namespace: str = "", runbook_type: str = "auto") -> None:
+    """Run an automated diagnostic runbook."""
+    from app.diagnostics.runbooks import run_diagnostic_runbook
+
+    target_desc = (
+        f"pod '{pod_name}'" if pod_name else f"unhealthy workloads in namespace '{namespace or 'default'}'"
+    )
+    with console.status(
+        f"[bold cyan]Executing {runbook_type} diagnostic runbook for {target_desc}...", spinner="dots"
+    ):
+        report = run_diagnostic_runbook(pod_name=pod_name, namespace=namespace, runbook_type=runbook_type)
+    console.print(Markdown(report))
+
+
+def cmd_helm(namespace: str = "") -> None:
+    """List Helm releases."""
+    from app.tools.gitops.helm import helm_list
+
+    with console.status("[bold cyan]Querying Helm releases...", spinner="dots"):
+        output = helm_list(namespace=namespace)
+    console.print(Panel(output, title="Helm Releases", border_style="cyan"))
+
+
+def cmd_argocd(namespace: str = "argocd", app_name: str = "") -> None:
+    """List or inspect Argo CD applications."""
+    from app.tools.gitops.argocd import get_argocd_apps
+
+    with console.status("[bold cyan]Querying Argo CD applications...", spinner="dots"):
+        output = get_argocd_apps(namespace=namespace, app_name=app_name)
+    console.print(Panel(output, title="Argo CD Applications", border_style="cyan"))
+
+
+def cmd_mcp() -> None:
+    """Launch Model Context Protocol (MCP) server over stdio."""
+    from app.mcp.server import run_stdio_server
+
+    run_stdio_server()
+
+
 def cmd_approvals_list() -> None:
     """List pending and historical approvals."""
     pending = manager.list_pending()
@@ -215,6 +254,9 @@ def repl() -> None:
                     Panel(
                         "- [bold]Ask any question[/bold]: 'why is checkout pod restarting in prod?'\n"
                         "- [bold]/scan[/bold]: Instant cluster-wide health check across all namespaces\n"
+                        "- [bold]/runbook [pod][/bold]: Run automated diagnostic runbook for pod failures\n"
+                        "- [bold]/helm [ns][/bold]: List Helm releases in namespace\n"
+                        "- [bold]/argocd [app][/bold]: Inspect Argo CD GitOps applications\n"
                         "- [bold]/approvals[/bold]: View pending and executed operational actions\n"
                         "- [bold]/approve <id>[/bold]: Approve and execute an action\n"
                         "- [bold]/deny <id>[/bold]: Deny an action\n"
@@ -227,6 +269,18 @@ def repl() -> None:
                 )
             elif low == "/scan":
                 cmd_scan()
+            elif low.startswith("/runbook"):
+                parts = user_input.split(maxsplit=2)
+                pod_target = parts[1] if len(parts) > 1 else ""
+                cmd_runbook(pod_name=pod_target)
+            elif low.startswith("/helm"):
+                parts = user_input.split(maxsplit=2)
+                ns_target = parts[1] if len(parts) > 1 else ""
+                cmd_helm(namespace=ns_target)
+            elif low.startswith("/argocd"):
+                parts = user_input.split(maxsplit=2)
+                app_target = parts[1] if len(parts) > 1 else ""
+                cmd_argocd(app_name=app_target)
             elif low == "/approvals":
                 cmd_approvals_list()
             elif low.startswith("/approve"):
@@ -265,6 +319,30 @@ def main() -> None:
     # kubepilot scan
     subparsers.add_parser("scan", help="Run cluster-wide health triage")
 
+    # kubepilot runbook [pod]
+    rb_parser = subparsers.add_parser("runbook", help="Run automated diagnostic runbook")
+    rb_parser.add_argument("pod", nargs="?", default="", help="Optional pod name to diagnose")
+    rb_parser.add_argument("--namespace", "-n", default="", help="Kubernetes namespace")
+    rb_parser.add_argument(
+        "--type",
+        "-t",
+        default="auto",
+        choices=["auto", "crashloop", "oom", "imagepull", "pending"],
+        help="Runbook type",
+    )
+
+    # kubepilot helm
+    helm_parser = subparsers.add_parser("helm", help="Inspect Helm releases")
+    helm_parser.add_argument("--namespace", "-n", default="", help="Kubernetes namespace")
+
+    # kubepilot argocd
+    argocd_parser = subparsers.add_parser("argocd", help="Inspect Argo CD applications")
+    argocd_parser.add_argument("--app", default="", help="Optional specific application name")
+    argocd_parser.add_argument("--namespace", "-n", default="argocd", help="Argo CD namespace")
+
+    # kubepilot mcp
+    subparsers.add_parser("mcp", help="Start Model Context Protocol (MCP) server over stdio")
+
     # kubepilot approvals
     appr_parser = subparsers.add_parser("approvals", help="Manage operational approvals")
     appr_sub = appr_parser.add_subparsers(dest="approvals_action")
@@ -289,6 +367,14 @@ def main() -> None:
         _handle_question(args.question, sid)
     elif args.command == "scan":
         cmd_scan()
+    elif args.command == "runbook":
+        cmd_runbook(pod_name=args.pod, namespace=args.namespace, runbook_type=args.type)
+    elif args.command == "helm":
+        cmd_helm(namespace=args.namespace)
+    elif args.command == "argocd":
+        cmd_argocd(namespace=args.namespace, app_name=args.app)
+    elif args.command == "mcp":
+        cmd_mcp()
     elif args.command == "approvals":
         if args.approvals_action == "approve":
             cmd_approvals_approve(args.id, note=args.note)

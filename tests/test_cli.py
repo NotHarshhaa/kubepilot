@@ -52,3 +52,25 @@ def test_cli_main_dispatch():
         with patch("sys.argv", ["kubepilot", "scan"]):
             cli.main()
             mock_scan.assert_called_once()
+
+
+def test_cli_runbook_and_gitops_dispatch():
+    with patch("app.cli.cmd_runbook") as mock_rb:
+        with patch("sys.argv", ["kubepilot", "runbook", "my-pod", "-n", "prod", "-t", "oom"]):
+            cli.main()
+            mock_rb.assert_called_once_with(pod_name="my-pod", namespace="prod", runbook_type="oom")
+
+    with patch("app.cli.cmd_helm") as mock_helm:
+        with patch("sys.argv", ["kubepilot", "helm", "-n", "kube-system"]):
+            cli.main()
+            mock_helm.assert_called_once_with(namespace="kube-system")
+
+    with patch("app.cli.cmd_argocd") as mock_argo:
+        with patch("sys.argv", ["kubepilot", "argocd", "--app", "my-app", "-n", "argocd"]):
+            cli.main()
+            mock_argo.assert_called_once_with(namespace="argocd", app_name="my-app")
+
+    with patch("app.cli.cmd_mcp") as mock_mcp:
+        with patch("sys.argv", ["kubepilot", "mcp"]):
+            cli.main()
+            mock_mcp.assert_called_once()

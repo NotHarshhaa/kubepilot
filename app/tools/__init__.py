@@ -4,8 +4,10 @@ Nothing here gives shell access — each tool is a narrow function with a
 declared safety category (see registry.SafetyCategory).
 """
 
-# Import all tool modules so their registrations run on `import app.tools`.
+from app.diagnostics import runbooks as _diagnostics  # noqa: F401
 from app.tools.github import github as _github  # noqa: F401
+from app.tools.gitops import argocd as _argocd  # noqa: F401
+from app.tools.gitops import helm as _helm  # noqa: F401
 from app.tools.kubernetes import tools as _kubernetes  # noqa: F401
 from app.tools.loki import loki as _loki  # noqa: F401
 from app.tools.prometheus import prometheus as _prometheus  # noqa: F401

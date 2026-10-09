@@ -92,9 +92,7 @@ def generate_post_mortem(
         doc.append(
             "| P2 | Add automated alert for recurring container restarts and CrashLoopBackOff | Monitoring |"
         )
-        doc.append(
-            "| P2 | Review CI/CD health checks and readiness probes before routing | QA |"
-        )
+        doc.append("| P2 | Review CI/CD health checks and readiness probes before routing | QA |")
     doc.append("")
     doc.append("---")
     doc.append(f"*Report compiled by KubePilot on {now_str}*")

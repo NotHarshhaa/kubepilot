@@ -130,3 +130,37 @@ def deny(approval_id: str, decision: ApprovalDecision | None = None) -> dict:
     except ApprovalError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"approval": asdict(record), "note": note}
+
+
+class RunbookRequest(BaseModel):
+    pod_name: str = ""
+    namespace: str = ""
+    runbook_type: str = "auto"
+
+
+@router.post("/diagnostics/runbook")
+def execute_runbook(request: RunbookRequest) -> dict:
+    from app.diagnostics.runbooks import run_diagnostic_runbook
+
+    report = run_diagnostic_runbook(
+        pod_name=request.pod_name,
+        namespace=request.namespace,
+        runbook_type=request.runbook_type,
+    )
+    return {"report": report}
+
+
+@router.get("/gitops/helm")
+def get_helm_releases(namespace: str = "") -> dict:
+    from app.tools.gitops.helm import helm_list
+
+    output = helm_list(namespace=namespace)
+    return {"output": output}
+
+
+@router.get("/gitops/argocd")
+def get_argocd_applications(namespace: str = "argocd", app_name: str = "") -> dict:
+    from app.tools.gitops.argocd import get_argocd_apps
+
+    output = get_argocd_apps(namespace=namespace, app_name=app_name)
+    return {"output": output}
