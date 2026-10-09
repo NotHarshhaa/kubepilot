@@ -68,6 +68,22 @@ class ApprovalManager:
         if spec is None:
             raise ApprovalError(f"Tool '{record.tool}' is not registered.")
         record.result = str(spec.func(**record.args))
+        if record.tool in ("restart_deployment", "scale_deployment", "rollback_deployment"):
+            try:
+                from app.remediation.verification import run_post_action_verification
+
+                dep_name = record.args.get("deployment") or record.args.get("name")
+                ns = record.args.get("namespace", "")
+                if dep_name:
+                    verif = run_post_action_verification(
+                        target=dep_name, namespace=ns, action_type=record.tool
+                    )
+                    record.result += (
+                        f"\n[Post-Action Verification: {verif.verdict.value}] "
+                        f"Ready: {verif.ready_replicas}/{verif.desired_replicas} replicas."
+                    )
+            except Exception:
+                pass
         record.status = "approved"
         record.note = note
         log_event("approval_granted", approval_id=record.id, tool=record.tool, note=note)

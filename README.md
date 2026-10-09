@@ -77,6 +77,8 @@ Kubernetes:  get_pods · get_deployments · get_services · get_events
 GitOps/Helm: helm_list · helm_status · helm_history · rollback_helm_release
              get_argocd_apps · get_argocd_app_diff · sync_argocd_app
 Diagnostics: run_diagnostic_runbook (CrashLoopBackOff · OOMKilled · ImagePullBackOff · PendingPod)
+Advisor:     analyze_resource_optimization (CPU/Memory right-sizing & cloud cost savings)
+Verify:      verify_remediation (automated post-action rollout & crash verification)
 Prometheus:  query · query_range
 Loki:        query_logs
 GitHub:      get_repository · get_workflow · get_workflow_logs · get_commit
@@ -161,6 +163,8 @@ Available CLI commands:
 - `kubepilot ask "Why is nginx pod restarting?"` — Run a one-shot troubleshooting query
 - `kubepilot scan` — Instant cluster-wide health triage across all nodes, pods, and deployments
 - `kubepilot runbook [pod] [--type crashloop|oom|imagepull|pending]` — Run automated deep diagnostic runbook
+- `kubepilot advisor [--namespace <ns>] [--workload <name>]` — AI Resource & Cost Optimization Advisor
+- `kubepilot verify <target> [--namespace <ns>]` — Post-remediation rollout & health verification
 - `kubepilot helm [--namespace <ns>]` — Inspect Helm releases and revisions
 - `kubepilot argocd [--app <name>]` — Inspect Argo CD GitOps applications and sync status
 - `kubepilot mcp` — Launch Model Context Protocol (MCP) server over stdio
@@ -197,6 +201,14 @@ curl http://localhost:8000/cluster/scan
 curl -X POST http://localhost:8000/diagnostics/runbook \
   -H "Content-Type: application/json" \
   -d '{"pod_name": "checkout-api-xxx", "namespace": "prod", "runbook_type": "auto"}'
+
+# AI Resource & Cost Optimization Advisory
+curl http://localhost:8000/advisor/resources?namespace=default
+
+# Post-remediation rollout & health verification
+curl -X POST http://localhost:8000/remediation/verify \
+  -H "Content-Type: application/json" \
+  -d '{"target": "checkout-api", "namespace": "prod", "action_type": "restart"}'
 
 # Inspect Helm releases
 curl http://localhost:8000/gitops/helm?namespace=kube-system
@@ -256,6 +268,8 @@ python -m app.mcp
 - [x] Automated cluster-wide health triage scanner (`cluster_health_scan`)
 - [x] Rollout status and revision history
 - [x] **Automated Diagnostic Runbooks** (`CrashLoopBackOff`, `OOMKilled`, `ImagePullBackOff`, `PendingPod`)
+- [x] **AI Resource & Cost Optimization Advisor** (CPU/memory requests vs limits vs actual usage, right-sizing & savings)
+- [x] **Automated Post-Remediation Verification Engine** (Validates rollout health, crash rates, and events after fixes)
 - [x] **GitOps & Package Manager Support** (Helm releases, history, rollback; Argo CD app status, diff, sync)
 - [x] **Model Context Protocol (MCP) Server** (standard stdio JSON-RPC for Claude Desktop & Cursor)
 - [x] Prometheus and Loki queries with basic metric/log correlation

@@ -90,6 +90,12 @@ class MCPServer:
                     "mimeType": "application/json",
                 },
                 {
+                    "uri": "k8s://advisor/resources",
+                    "name": "Resource & Cost Optimization Advisory",
+                    "description": "AI right-sizing recommendations and projected monthly cloud savings.",
+                    "mimeType": "text/plain",
+                },
+                {
                     "uri": "k8s://settings",
                     "name": "KubePilot Configuration",
                     "description": "Current KubePilot settings, safety mode, and provider.",
@@ -161,6 +167,19 @@ class MCPServer:
                 ]
             }
 
+        elif uri == "k8s://advisor/resources":
+            try:
+                from app.advisor.resources import analyze_resource_optimization
+
+                report = analyze_resource_optimization()
+                return {"contents": [{"uri": uri, "mimeType": "text/plain", "text": report}]}
+            except Exception as exc:
+                return {
+                    "contents": [
+                        {"uri": uri, "mimeType": "text/plain", "text": f"Error running advisor: {exc}"}
+                    ]
+                }
+
         return {"contents": [{"uri": uri, "mimeType": "text/plain", "text": f"Unknown resource URI: {uri}"}]}
 
     def handle_prompts_list(self) -> dict[str, Any]:
@@ -178,6 +197,22 @@ class MCPServer:
                     "name": "cluster_scan",
                     "description": "Perform an instant cluster-wide health triage.",
                     "arguments": [],
+                },
+                {
+                    "name": "resource_optimization",
+                    "description": "Analyze workload resource requests, limits, and cost savings.",
+                    "arguments": [
+                        {"name": "workload", "description": "Workload or deployment name", "required": False},
+                        {"name": "namespace", "description": "Kubernetes namespace", "required": False},
+                    ],
+                },
+                {
+                    "name": "verify_remediation",
+                    "description": "Verify post-remediation rollout status, crash rates, and events.",
+                    "arguments": [
+                        {"name": "target", "description": "Deployment name to verify", "required": True},
+                        {"name": "namespace", "description": "Kubernetes namespace", "required": False},
+                    ],
                 },
                 {
                     "name": "helm_triage",
@@ -214,6 +249,31 @@ class MCPServer:
             )
             return {
                 "description": "Cluster health scan",
+                "messages": [{"role": "user", "content": {"type": "text", "text": prompt_text}}],
+            }
+
+        elif name == "resource_optimization":
+            wl = args.get("workload", "")
+            ns = args.get("namespace", "default")
+            prompt_text = (
+                f"Run resource optimization advisory for workload '{wl}' in namespace '{ns}'. "
+                f"Identify over-provisioned or under-provisioned containers, calculate potential monthly "
+                f"cloud savings, and provide recommended YAML patches."
+            )
+            return {
+                "description": "Resource optimization advisory",
+                "messages": [{"role": "user", "content": {"type": "text", "text": prompt_text}}],
+            }
+
+        elif name == "verify_remediation":
+            target = args.get("target", "<target>")
+            ns = args.get("namespace", "default")
+            prompt_text = (
+                f"Verify whether remediation for deployment '{target}' in namespace '{ns}' was successful. "
+                f"Check rollout completion, container crash rates, and any new warning events."
+            )
+            return {
+                "description": "Verify remediation",
                 "messages": [{"role": "user", "content": {"type": "text", "text": prompt_text}}],
             }
 

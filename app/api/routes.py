@@ -164,3 +164,30 @@ def get_argocd_applications(namespace: str = "argocd", app_name: str = "") -> di
 
     output = get_argocd_apps(namespace=namespace, app_name=app_name)
     return {"output": output}
+
+
+@router.get("/advisor/resources")
+def get_resource_advice(namespace: str = "", workload: str = "") -> dict:
+    from app.advisor.resources import analyze_resource_optimization
+
+    report = analyze_resource_optimization(namespace=namespace, workload=workload)
+    return {"report": report}
+
+
+class VerifyRemediationRequest(BaseModel):
+    target: str
+    namespace: str = ""
+    action_type: str = "restart"
+
+
+@router.post("/remediation/verify")
+def verify_remediation_endpoint(request: VerifyRemediationRequest) -> dict:
+    from app.remediation.verification import verify_remediation
+
+    report = verify_remediation(
+        target=request.target,
+        namespace=request.namespace,
+        action_type=request.action_type,
+    )
+    return {"report": report}
+

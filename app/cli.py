@@ -89,6 +89,25 @@ def cmd_mcp() -> None:
     run_stdio_server()
 
 
+def cmd_advisor(namespace: str = "", workload: str = "") -> None:
+    """Run AI Resource & Cost Optimization Advisor."""
+    from app.advisor.resources import analyze_resource_optimization
+
+    with console.status("[bold cyan]Analyzing workload resources and cost savings...", spinner="dots"):
+        report = analyze_resource_optimization(namespace=namespace, workload=workload)
+    console.print(Markdown(report))
+
+
+def cmd_verify(target: str, namespace: str = "", action_type: str = "restart") -> None:
+    """Run post-remediation verification."""
+    from app.remediation.verification import verify_remediation
+
+    with console.status(f"[bold cyan]Verifying remediation for {target}...", spinner="dots"):
+        report = verify_remediation(target=target, namespace=namespace, action_type=action_type)
+    console.print(Markdown(report))
+
+
+
 def cmd_approvals_list() -> None:
     """List pending and historical approvals."""
     pending = manager.list_pending()
@@ -257,6 +276,8 @@ def repl() -> None:
                         "- [bold]/runbook [pod][/bold]: Run automated diagnostic runbook for pod failures\n"
                         "- [bold]/helm [ns][/bold]: List Helm releases in namespace\n"
                         "- [bold]/argocd [app][/bold]: Inspect Argo CD GitOps applications\n"
+                        "- [bold]/advisor [workload][/bold]: AI Resource & Cost Optimization Advisor\n"
+                        "- [bold]/verify <target>[/bold]: Verify post-remediation rollout and health\n"
                         "- [bold]/approvals[/bold]: View pending and executed operational actions\n"
                         "- [bold]/approve <id>[/bold]: Approve and execute an action\n"
                         "- [bold]/deny <id>[/bold]: Deny an action\n"
@@ -281,6 +302,17 @@ def repl() -> None:
                 parts = user_input.split(maxsplit=2)
                 app_target = parts[1] if len(parts) > 1 else ""
                 cmd_argocd(app_name=app_target)
+            elif low.startswith("/advisor"):
+                parts = user_input.split(maxsplit=2)
+                wl_target = parts[1] if len(parts) > 1 else ""
+                cmd_advisor(workload=wl_target)
+            elif low.startswith("/verify"):
+                parts = user_input.split(maxsplit=2)
+                target = parts[1] if len(parts) > 1 else ""
+                if target:
+                    cmd_verify(target=target)
+                else:
+                    console.print("[yellow]Usage: /verify <deployment_name>[/yellow]")
             elif low == "/approvals":
                 cmd_approvals_list()
             elif low.startswith("/approve"):
@@ -343,6 +375,17 @@ def main() -> None:
     # kubepilot mcp
     subparsers.add_parser("mcp", help="Start Model Context Protocol (MCP) server over stdio")
 
+    # kubepilot advisor
+    adv_parser = subparsers.add_parser("advisor", help="AI Resource & Cost Optimization Advisor")
+    adv_parser.add_argument("--workload", "-w", default="", help="Optional specific workload/deployment name")
+    adv_parser.add_argument("--namespace", "-n", default="", help="Kubernetes namespace")
+
+    # kubepilot verify <target>
+    ver_parser = subparsers.add_parser("verify", help="Post-remediation rollout and health verification")
+    ver_parser.add_argument("target", help="Deployment name to verify")
+    ver_parser.add_argument("--namespace", "-n", default="", help="Kubernetes namespace")
+    ver_parser.add_argument("--action", "-a", default="restart", help="Remediation action type")
+
     # kubepilot approvals
     appr_parser = subparsers.add_parser("approvals", help="Manage operational approvals")
     appr_sub = appr_parser.add_subparsers(dest="approvals_action")
@@ -375,6 +418,10 @@ def main() -> None:
         cmd_argocd(namespace=args.namespace, app_name=args.app)
     elif args.command == "mcp":
         cmd_mcp()
+    elif args.command == "advisor":
+        cmd_advisor(namespace=args.namespace, workload=args.workload)
+    elif args.command == "verify":
+        cmd_verify(target=args.target, namespace=args.namespace, action_type=args.action)
     elif args.command == "approvals":
         if args.approvals_action == "approve":
             cmd_approvals_approve(args.id, note=args.note)

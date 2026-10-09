@@ -74,3 +74,14 @@ def test_cli_runbook_and_gitops_dispatch():
         with patch("sys.argv", ["kubepilot", "mcp"]):
             cli.main()
             mock_mcp.assert_called_once()
+
+    with patch("app.cli.cmd_advisor") as mock_adv:
+        with patch("sys.argv", ["kubepilot", "advisor", "-w", "my-app", "-n", "prod"]):
+            cli.main()
+            mock_adv.assert_called_once_with(namespace="prod", workload="my-app")
+
+    with patch("app.cli.cmd_verify") as mock_ver:
+        with patch("sys.argv", ["kubepilot", "verify", "web-api", "-n", "prod", "-a", "rollback"]):
+            cli.main()
+            mock_ver.assert_called_once_with(target="web-api", namespace="prod", action_type="rollback")
+

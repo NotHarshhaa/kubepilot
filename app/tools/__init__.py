@@ -4,7 +4,9 @@ Nothing here gives shell access — each tool is a narrow function with a
 declared safety category (see registry.SafetyCategory).
 """
 
+from app.advisor import resources as _advisor  # noqa: F401
 from app.diagnostics import runbooks as _diagnostics  # noqa: F401
+from app.remediation import verification as _remediation  # noqa: F401
 from app.tools.github import github as _github  # noqa: F401
 from app.tools.gitops import argocd as _argocd  # noqa: F401
 from app.tools.gitops import helm as _helm  # noqa: F401

@@ -105,3 +105,23 @@ def test_gitops_endpoints(monkeypatch):
     res_argo = client.get("/gitops/argocd")
     assert res_argo.status_code == 200
     assert res_argo.json()["output"] == "Mock ArgoCD Apps"
+
+
+def test_advisor_and_verification_endpoints(monkeypatch):
+    from app.advisor import resources
+    from app.remediation import verification
+
+    monkeypatch.setattr(resources, "analyze_resource_optimization", lambda **kwargs: "Mock Advisor Report")
+    monkeypatch.setattr(verification, "verify_remediation", lambda **kwargs: "Mock Verify Report")
+
+    res_adv = client.get("/advisor/resources?namespace=default")
+    assert res_adv.status_code == 200
+    assert res_adv.json()["report"] == "Mock Advisor Report"
+
+    res_ver = client.post(
+        "/remediation/verify",
+        json={"target": "api-gateway", "namespace": "default", "action_type": "restart"},
+    )
+    assert res_ver.status_code == 200
+    assert res_ver.json()["report"] == "Mock Verify Report"
+
