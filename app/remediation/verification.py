@@ -77,9 +77,7 @@ def run_post_action_verification(
 
     # 1. Rollout progression
     if observed_gen < gen:
-        details.append(
-            f"Rollout pending: observed generation ({observed_gen}) < spec generation ({gen})."
-        )
+        details.append(f"Rollout pending: observed generation ({observed_gen}) < spec generation ({gen}).")
     elif updated < desired:
         details.append(f"Rollout in progress: {updated}/{desired} replicas updated.")
     elif ready < desired:

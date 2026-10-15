@@ -124,4 +124,3 @@ def test_advisor_and_verification_endpoints(monkeypatch):
     )
     assert res_ver.status_code == 200
     assert res_ver.json()["report"] == "Mock Verify Report"
-

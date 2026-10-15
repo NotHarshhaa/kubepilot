@@ -107,7 +107,6 @@ def cmd_verify(target: str, namespace: str = "", action_type: str = "restart") -
     console.print(Markdown(report))
 
 
-
 def cmd_approvals_list() -> None:
     """List pending and historical approvals."""
     pending = manager.list_pending()
@@ -291,17 +290,29 @@ def repl() -> None:
             elif low == "/scan":
                 cmd_scan()
             elif low.startswith("/runbook"):
-                parts = user_input.split(maxsplit=2)
+                parts = user_input.split(maxsplit=3)
                 pod_target = parts[1] if len(parts) > 1 else ""
-                cmd_runbook(pod_name=pod_target)
+                ns_target = ""
+                if len(parts) > 2:
+                    if parts[2] in ("-n", "--namespace"):
+                        ns_target = parts[3] if len(parts) > 3 else ""
+                    else:
+                        ns_target = parts[2]
+                cmd_runbook(pod_name=pod_target, namespace=ns_target)
             elif low.startswith("/helm"):
                 parts = user_input.split(maxsplit=2)
                 ns_target = parts[1] if len(parts) > 1 else ""
                 cmd_helm(namespace=ns_target)
             elif low.startswith("/argocd"):
-                parts = user_input.split(maxsplit=2)
+                parts = user_input.split(maxsplit=3)
                 app_target = parts[1] if len(parts) > 1 else ""
-                cmd_argocd(app_name=app_target)
+                ns_target = "argocd"
+                if len(parts) > 2:
+                    if parts[2] in ("-n", "--namespace"):
+                        ns_target = parts[3] if len(parts) > 3 else "argocd"
+                    else:
+                        ns_target = parts[2]
+                cmd_argocd(namespace=ns_target, app_name=app_target)
             elif low.startswith("/advisor"):
                 parts = user_input.split(maxsplit=2)
                 wl_target = parts[1] if len(parts) > 1 else ""

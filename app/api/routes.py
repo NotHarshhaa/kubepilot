@@ -190,4 +190,3 @@ def verify_remediation_endpoint(request: VerifyRemediationRequest) -> dict:
         action_type=request.action_type,
     )
     return {"report": report}
-

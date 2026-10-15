@@ -483,10 +483,7 @@ def run_diagnostic_runbook(
 
         if not unhealthy_pods:
             scope = "all namespaces" if ns.upper() == "ALL" else f"namespace '{ns}'"
-            return (
-                f"No unhealthy pods detected in {scope}. "
-                f"All {len(pods)} pod(s) are running normally."
-            )
+            return f"No unhealthy pods detected in {scope}. All {len(pods)} pod(s) are running normally."
 
         reports = [
             "## KubePilot Automated Diagnostic Runbook Suite",

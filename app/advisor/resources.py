@@ -212,11 +212,7 @@ def analyze_deployment_resources(
                 f"CPU request is {cpu_req_cores:.2f} cores, but peak usage is only {act_cpu:.2f} cores."
             )
 
-        if (
-            mem_req_bytes > 0
-            and mem_req_bytes >= act_mem * 2.5
-            and (mem_req_bytes - act_mem) > 200 * 1024**2
-        ):
+        if mem_req_bytes > 0 and mem_req_bytes >= act_mem * 2.5 and (mem_req_bytes - act_mem) > 200 * 1024**2:
             status = "OVER_PROVISIONED"
             findings.append(
                 f"Memory request is {format_memory(mem_req_bytes)}, "
@@ -241,9 +237,7 @@ def analyze_deployment_resources(
 
         # Cost savings calculation per container (across all replicas)
         saved_cpu_cores = max(cpu_req_cores - target_cpu_req, 0.0) if cpu_req_cores > 0 else 0.0
-        saved_mem_gb = (
-            max(mem_req_bytes - target_mem_req, 0.0) / (1024**3) if mem_req_bytes > 0 else 0.0
-        )
+        saved_mem_gb = max(mem_req_bytes - target_mem_req, 0.0) / (1024**3) if mem_req_bytes > 0 else 0.0
 
         container_savings = (
             (saved_cpu_cores * ESTIMATED_VCPU_MONTHLY_COST) + (saved_mem_gb * ESTIMATED_GB_RAM_MONTHLY_COST)
@@ -284,13 +278,7 @@ def analyze_deployment_resources(
             f'              memory: "{rec_mem_lim}"'
         )
 
-    patch_yaml = (
-        "spec:\n"
-        "  template:\n"
-        "    spec:\n"
-        "      containers:\n"
-        + "\n".join(patch_containers)
-    )
+    patch_yaml = "spec:\n  template:\n    spec:\n      containers:\n" + "\n".join(patch_containers)
 
     return WorkloadOptimizationReport(
         workload=dep_name,
@@ -342,9 +330,7 @@ def format_optimization_report(reports: list[WorkloadOptimizationReport]) -> str
                 for f in c.findings:
                     lines.append(f"  - {f}")
                 mem_str = format_memory(c.actual_mem_bytes)
-                lines.append(
-                    f"  - *Live Peak Observed*: CPU: {c.actual_cpu_cores:.3f} cores, Mem: {mem_str}"
-                )
+                lines.append(f"  - *Live Peak Observed*: CPU: {c.actual_cpu_cores:.3f} cores, Mem: {mem_str}")
 
         lines.append("\n**Recommended Patch**:")
         lines.append("```yaml")

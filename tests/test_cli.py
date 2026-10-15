@@ -84,4 +84,3 @@ def test_cli_runbook_and_gitops_dispatch():
         with patch("sys.argv", ["kubepilot", "verify", "web-api", "-n", "prod", "-a", "rollback"]):
             cli.main()
             mock_ver.assert_called_once_with(target="web-api", namespace="prod", action_type="rollback")
-
